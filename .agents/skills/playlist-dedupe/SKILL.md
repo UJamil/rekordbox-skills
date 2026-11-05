@@ -234,11 +234,40 @@ python3 scripts/apply_changes.py /tmp/rb-manifest.json --apply    # write for re
 After writing, the script **verifies** the database matches the manifest and, on
 any mismatch, prints a loud warning pointing at the full DB backup. It writes
 `applied_log.json` listing the DB-file backup, every snapshot playlist, and the
-verification result. If **Cloud Library Sync** (e.g. Dropbox) is enabled, it
-prints a heads-up: removals upload on the next sync, so reopen rekordbox and let
+verification result. If the library names a **Cloud Library Sync** service (e.g.
+Dropbox, which can be set while sync is off), it prints a heads-up: removals upload on the next sync, so reopen rekordbox and let
 a sync finish before judging the result. Tell the user to reopen rekordbox to
 verify, that the `Claude Backups` folder holds their in-app restore points, and
 that `rekordbox-db-backups/` holds the permanent full-database backups.
+
+### Optional — clear loser audio files (opt-in)
+
+This step changes only playlists and files. Loser tracks stay in the rekordbox
+collection, and they show "file not found" once their files are moved.
+
+`--delete-files` moves each loser's file into a timestamped folder under
+`rekordbox-deleted-files/` beside `master.db`. Nothing is unlinked, so disk space
+comes back only when the user deletes that folder themselves. `moved_files.json`
+in the folder lists every original path, so a move can be undone.
+
+```
+# with the apply, after it verifies cleanly
+python3 scripts/apply_changes.py manifest.json --apply --delete-files
+
+# for a manifest that was already applied (never re-run --apply on one)
+python3 scripts/apply_changes.py manifest.json --delete-files --files-only           # preview
+python3 scripts/apply_changes.py manifest.json --delete-files --files-only --apply   # move
+```
+
+Paths come from the live database, not the manifest. A file is **blocked** and
+left alone if a kept track shares it, the loser is still in any playlist outside
+`Claude Backups` (including protected Backup playlists), the kept copy's file is
+not on disk, or the loser is the winner of another group. Losers in `Claude
+Backups` snapshots can move, and the preview shows how many snapshots each is in.
+
+Show the user the `--files-only` preview and confirm before moving anything. If
+files show as not on disk because the volume was renamed, have the user run
+**File > Manage Library > Relocate** in rekordbox first.
 
 ## Quality ranking (how the winner is recommended)
 

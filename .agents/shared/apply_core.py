@@ -31,8 +31,10 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import shutil
 import sys
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
@@ -109,6 +111,9 @@ BACKUP_SUFFIX = "Claude Backup"
 # backups are the guaranteed restore point and are kept FOREVER -- the skill
 # never prunes them.
 DB_BACKUP_DIRNAME = "rekordbox-db-backups"
+
+# Folder beside master.db that --delete-files moves loser audio files into.
+QUARANTINE_DIRNAME = "rekordbox-deleted-files"
 
 
 def collect_actions(manifest: dict, messages: dict):
@@ -234,7 +239,8 @@ def snapshot_playlists(db, tables, index, affected, human_stamp):
         new_pl = db.create_playlist(title, parent=parent)
 
         rows = (db.get_playlist_songs()
-                .filter(tables.DjmdSongPlaylist.PlaylistID == pid).all())
+                .filter(tables.DjmdSongPlaylist.PlaylistID == pid,
+                        tables.DjmdSongPlaylist.rb_local_deleted == 0).all())
         rows.sort(key=lambda r: int(r.TrackNo or 0))
         for seq, r in enumerate(rows, 1):
             db.add_to_playlist(new_pl, str(r.ContentID), track_no=seq)
@@ -344,8 +350,8 @@ def verify_applied(db, tables, adds, removes) -> list[str]:
 
 
 def cloud_sync_service(db) -> str:
-    """Name of the configured rekordbox Cloud Library Sync service (e.g.
-    'Dropbox'), or '' if none. Read-only, best-effort -- used only to print a
+    """Name of the rekordbox Cloud Library Sync service on record (e.g.
+    'Dropbox'), or '' if none. It can be set while sync is off. Read-only, best-effort -- used only to print a
     heads-up that tombstoned removals upload on the next sync."""
     try:
         from sqlalchemy import text
@@ -360,15 +366,213 @@ def cloud_sync_service(db) -> str:
         return ""
 
 
+def backup_database(db) -> tuple[Path, Path]:
+    """Full, timestamped copy of the database into a dedicated folder beside
+    master.db, kept FOREVER. This is the guaranteed restore point: copying it back
+    over master.db fully reverts a run. Returns (db_path, backup_path)."""
+    db_path = find_db_path(db)
+    if not (db_path and db_path.exists()):
+        raise SystemExit(
+            "Could not locate master.db to back up. Refusing to write without a "
+            "backup. Locate the file and make a copy manually first."
+        )
+    # rekordbox runs in WAL mode, so recent changes can sit in master.db-wal. Fold
+    # them in first, or a copy of master.db alone would silently miss them.
+    from sqlalchemy import text
+    db.rollback()
+    with db.engine.connect() as con:
+        busy, log_frames, done = con.execute(text("PRAGMA wal_checkpoint(TRUNCATE)")).fetchone()
+    if busy or log_frames != done:
+        raise SystemExit(
+            "Could not flush master.db-wal because another process has the database "
+            "open, so a backup would be incomplete. Close it and try again."
+        )
+    backup_dir = db_path.parent / DB_BACKUP_DIRNAME
+    backup_dir.mkdir(exist_ok=True)
+    stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    backup = backup_dir / f"{db_path.stem}-{stamp}{db_path.suffix}"
+    shutil.copy2(db_path, backup)
+    print(f"Backed up database -> {backup}")
+    print(f"(Full DB backups are kept permanently in '{backup_dir}'.)")
+    return db_path, backup
+
+
+def path_key(path: str) -> str:
+    """Comparison key for a file path. macOS volumes are usually case-insensitive
+    and store decomposed Unicode, so raw string equality misses the same file."""
+    return unicodedata.normalize("NFC", path).casefold()
+
+
+def load_file_state(db, tables):
+    """Current path of every track, and every live playlist membership as
+    content_id -> [(playlist path, is_snapshot)]. Read from the database rather
+    than the manifest so a Relocate done after the scan is picked up."""
+    content_paths = {str(c.ID): c.FolderPath or "" for c in db.get_content()}
+    index = build_playlist_index(db)
+    memberships: dict[str, list[tuple[str, bool]]] = {}
+    rows = db.get_playlist_songs().filter(tables.DjmdSongPlaylist.rb_local_deleted == 0)
+    for row in rows:
+        pid = str(row.PlaylistID)
+        node = index.get(pid)
+        ancestors = ancestor_names(index, pid)
+        label = " / ".join([*ancestors, (node.Name if node else pid) or ""])
+        memberships.setdefault(str(row.ContentID), []).append(
+            (label, ancestors[:1] == [BACKUP_ROOT]))
+    return content_paths, memberships
+
+
+def plan_file_removals(manifest: dict, content_paths: dict, memberships: dict) -> dict:
+    """Sort every collapsed loser into `move`, `missing` or `blocked`.
+
+    A file is only movable if nothing kept depends on it: no kept track shares the
+    path, the loser sits in no playlist outside the Claude Backups snapshots, and
+    the keeper's own file is on disk. Snapshot memberships don't block, because
+    quarantined files can be put back; each entry records how many it has."""
+    winner_of: dict[str, str] = {}
+    winners: set[str] = set()
+    for grp in manifest.get("groups", []):
+        if grp.get("decision") != "collapse":
+            continue
+        winner = str(grp["winner_content_id"])
+        winners.add(winner)
+        for m in grp.get("members", []):
+            if str(m["content_id"]) != winner:
+                winner_of[str(m["content_id"])] = winner
+
+    removable = set(winner_of) - winners
+    owners: dict[str, set[str]] = {}
+    for cid, path in content_paths.items():
+        if path:
+            owners.setdefault(path_key(path), set()).add(cid)
+
+    plan: dict[str, list] = {"move": [], "missing": [], "blocked": []}
+    seen: set[str] = set()
+    for cid, winner in winner_of.items():
+        path = content_paths.get(cid, "")
+        keeper = content_paths.get(winner, "")
+        member_of = memberships.get(cid, [])
+        live = [label for label, is_snapshot in member_of if not is_snapshot]
+        entry = {"content_id": cid, "path": path, "keeper_path": keeper,
+                 "snapshots": len(member_of) - len(live)}
+
+        reason = None
+        if not path:
+            reason = "no file path in the database"
+        elif cid in winners:
+            reason = "kept as the winner of another group"
+        elif owners.get(path_key(path), set()) - removable:
+            reason = "file is shared with a kept track"
+        elif live:
+            reason = f"still in {len(live)} playlist(s): {'; '.join(live[:3])}"
+        elif not os.path.exists(path):
+            plan["missing"].append(entry)
+            continue
+        elif not (keeper and os.path.exists(keeper)):
+            reason = "the kept copy's file is not on disk"
+        elif os.path.samefile(path, keeper):
+            reason = "same file on disk as the kept copy"
+
+        if reason:
+            plan["blocked"].append({**entry, "reason": reason})
+        elif path_key(path) not in seen:
+            seen.add(path_key(path))
+            plan["move"].append(entry)
+    return plan
+
+
+def print_file_plan(plan: dict) -> None:
+    print(f"\n  File cleanup: {len(plan['move'])} to quarantine, "
+          f"{len(plan['blocked'])} blocked, {len(plan['missing'])} not on disk.")
+    for e in plan["move"]:
+        note = f"  (in {e['snapshots']} snapshot(s))" if e["snapshots"] else ""
+        print(f"    MOVE     {e['path']}{note}")
+    for e in plan["blocked"]:
+        print(f"    BLOCKED  {e['path'] or e['content_id']}: {e['reason']}")
+    if plan["missing"]:
+        print(f"    {len(plan['missing'])} loser file(s) are not at the path rekordbox "
+              "records. If the volume was renamed, run File > Manage Library > "
+              "Relocate in rekordbox first.")
+
+
+def quarantine_files(moves: list, dest_root: Path) -> tuple[list, list]:
+    """Move files under dest_root, mirroring their original paths, and record each
+    move in moved_files.json so it can be undone. Nothing is unlinked: emptying
+    the quarantine folder is left to the user."""
+    moved, errors = [], []
+    for e in moves:
+        dest = dest_root.joinpath(*Path(e["path"]).parts[1:])
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(e["path"], dest)
+            moved.append({"content_id": e["content_id"], "from": e["path"], "to": str(dest)})
+        except Exception as exc:
+            errors.append(f"{e['path']}: {exc}")
+    if moved:
+        (dest_root / "moved_files.json").write_text(
+            json.dumps(moved, indent=2, ensure_ascii=False), encoding="utf-8")
+    return moved, errors
+
+
+def run_file_step(db, tables, manifest: dict, db_path: Path) -> dict:
+    """Plan and perform the quarantine; returns a summary for the audit log."""
+    plan = plan_file_removals(manifest, *load_file_state(db, tables))
+    print_file_plan(plan)
+    stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    dest_root = db_path.parent / QUARANTINE_DIRNAME / stamp
+    moved, errors = quarantine_files(plan["move"], dest_root)
+    if moved:
+        print(f"\nMoved {len(moved)} file(s) to {dest_root}")
+        print("They stay on disk until you delete that folder. moved_files.json in it "
+              "lists every original path.")
+    for e in errors:
+        print(f"  FAILED  {e}")
+    return {"quarantine": str(dest_root) if moved else None, "moved": moved,
+            "blocked": plan["blocked"], "missing": plan["missing"], "errors": errors}
+
+
+def run_files_only(args, manifest: dict) -> int:
+    """File cleanup for a manifest that was already applied. Never writes to the
+    database, so it avoids re-running removals and renumbering playlists twice."""
+    if args.apply and rekordbox_running():
+        raise SystemExit("rekordbox appears to be RUNNING. Close it completely before "
+                         "moving audio files it may have open.")
+    logging.getLogger("pyrekordbox").setLevel(logging.ERROR)
+    db = get_db()
+    from pyrekordbox.db6 import tables  # noqa: E402  (needs the db package)
+
+    if not args.apply:
+        print("DRY RUN (no files moved).")
+        print_file_plan(plan_file_removals(manifest, *load_file_state(db, tables)))
+        print("\nRe-run with --apply to move these files.")
+        return 0
+
+    db_path = find_db_path(db)
+    if not db_path:
+        raise SystemExit("Could not locate master.db, so there is nowhere to put the "
+                         "quarantine folder.")
+    return 1 if run_file_step(db, tables, manifest, db_path)["errors"] else 0
+
+
 def main(messages: dict) -> int:
     ap = argparse.ArgumentParser(description="Apply an approved manifest to rekordbox.")
     ap.add_argument("manifest", help="Path to the approved manifest.json.")
     ap.add_argument("--apply", action="store_true",
                     help="Actually write changes. Without this flag, dry run only.")
+    ap.add_argument("--delete-files", action="store_true",
+                    help="Also clear loser audio files off the library: after a verified "
+                         "apply, move them to a quarantine folder beside master.db. "
+                         "Disk space comes back when you delete that folder.")
+    ap.add_argument("--files-only", action="store_true",
+                    help="With --delete-files: skip all database changes, for a manifest "
+                         "that was already applied. Never re-run --apply on one.")
     args = ap.parse_args()
+    if args.files_only and not args.delete_files:
+        ap.error("--files-only needs --delete-files.")
 
     manifest = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
     adds, removes = collect_actions(manifest, messages)
+    if args.files_only:
+        return run_files_only(args, manifest)
 
     pl = manifest.get("playlist", {})
     print(f"Manifest for: {pl.get('path')} ({pl.get('id')})")
@@ -393,7 +597,11 @@ def main(messages: dict) -> int:
         for r in removes:
             print(f"    REMOVE  song {r['song_id']} (content {r['content_id']}) from {r['playlist_path']}")
         print(f"\n  A full, permanent copy of master.db will be saved under '{DB_BACKUP_DIRNAME}/' first.")
-        print("Re-run with --apply to write these changes.")
+        if args.delete_files:
+            print("\n  After a verified apply, loser files would be quarantined. This "
+                  "list can only be\n  worked out once the apply has run; preview it "
+                  "then with --delete-files --files-only.")
+        print("\nRe-run with --apply to write these changes.")
         return 0
 
     # ---- Safety gates (only reached with --apply) ----
@@ -408,22 +616,7 @@ def main(messages: dict) -> int:
     logging.getLogger("pyrekordbox").setLevel(logging.ERROR)
 
     db = get_db()
-    db_path = find_db_path(db)
-    if not (db_path and db_path.exists()):
-        raise SystemExit(
-            "Could not locate master.db to back up. Refusing to write without a "
-            "backup. Locate the file and make a copy manually first."
-        )
-    # Full, timestamped copy of the database into a dedicated folder beside
-    # master.db, kept FOREVER. This is the guaranteed restore point: if anything
-    # ever goes wrong, copying this file back over master.db fully reverts the run.
-    backup_dir = db_path.parent / DB_BACKUP_DIRNAME
-    backup_dir.mkdir(exist_ok=True)
-    stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    backup = backup_dir / f"{db_path.stem}-{stamp}{db_path.suffix}"
-    shutil.copy2(db_path, backup)
-    print(f"Backed up database -> {backup}")
-    print(f"(Full DB backups are kept permanently in '{backup_dir}'.)")
+    db_path, backup = backup_database(db)
 
     from pyrekordbox.db6 import tables  # noqa: E402  (needs the db package)
 
@@ -497,6 +690,14 @@ def main(messages: dict) -> int:
     # ---- Verify the database matches the manifest's intent ----
     problems = verify_applied(db, tables, adds, removes)
 
+    file_cleanup = None
+    if args.delete_files:
+        if remove_errors or problems:
+            print("\nSkipping file cleanup: the apply did not verify cleanly, so no "
+                  "audio files were moved.")
+        else:
+            file_cleanup = run_file_step(db, tables, manifest, db_path)
+
     # Write an audit log next to the manifest.
     log_path = Path(args.manifest).with_name("applied_log.json")
     log_path.write_text(json.dumps({
@@ -510,6 +711,7 @@ def main(messages: dict) -> int:
         "removes": applied["removes"],
         "remove_errors": remove_errors,
         "verification_problems": problems,
+        "file_cleanup": file_cleanup,
     }, indent=2), encoding="utf-8")
 
     skipped_note = (f", skipped {applied['skipped_adds']} already-present add(s)"
@@ -521,9 +723,9 @@ def main(messages: dict) -> int:
 
     sync = cloud_sync_service(db)
     if sync:
-        print(f"\nNote: Cloud Library Sync ({sync}) is enabled. Removals are written as")
-        print("tombstones and upload on the next sync -- reopen rekordbox and let a sync")
-        print("finish before judging the result, or the cloud copy may look unchanged.")
+        print(f"\nNote: this library names a Cloud Library Sync service ({sync}), which")
+        print("doesn't prove sync is on. If it is, removals upload on the next sync as")
+        print("tombstones -- reopen rekordbox and let a sync finish before judging the result.")
 
     if remove_errors:
         print("\nWARNING: some removals failed. Winners were already added, so no")

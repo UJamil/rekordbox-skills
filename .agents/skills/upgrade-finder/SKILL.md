@@ -222,10 +222,25 @@ removed, its playlist row is marked the way rekordbox itself marks a deletion
 (`rb_local_deleted=1`, `rb_data_status=262`, a fresh row USN) rather than
 physically deleted. A hard-deleted row leaves nothing for **Cloud Library Sync**
 to upload, so the next sync re-adds it from the cloud and the upgrade silently
-reverts; a tombstone uploads as a real deletion and sticks. If Cloud Library Sync
-(e.g. Dropbox) is enabled, the script prints a heads-up — reopen rekordbox and
+reverts; a tombstone uploads as a real deletion and sticks. If the library names a
+Cloud Library Sync service (e.g. Dropbox, which can be set while sync is off), the
+script prints a heads-up — reopen rekordbox and
 let a sync finish before judging the result. Tell the user to reopen rekordbox to
 see the results.
+
+## Whole-library low-bitrate scan
+
+To flag every low-bitrate lossy track in the collection, rather than one playlist:
+
+```
+python3 scripts/scan_low_bitrate.py --report low-bitrate.csv
+python3 scripts/scan_low_bitrate.py --report low.csv --max-bitrate 256 --exclude-losers <dedupe-manifest>
+```
+
+Read-only. The default limit is 192 kbps. The CSV lists tracks to find first, ordered
+by playlist count, cues and plays, and shows any better copy already owned. rekordbox
+stores 0 for some files, so those use an estimate from size and length, marked in the
+`Estimated` column.
 
 ## Guardrails
 

@@ -24,6 +24,18 @@ it, and ask in plain language.
   this track do I have?" and get a read-only table of every version, edit, and
   remix already in your library (Version, Format, Bitrate, BPM, Key, and the
   playlists each lives in), one row per file. Version-aware; changes nothing.
+- **[file-dedupe](.agents/skills/file-dedupe/)** — find byte-identical audio files
+  on a drive, compare the folders side by side, and choose which copies to keep on
+  an interactive page. Read-only so far.
+- **[genre-tagger](.agents/skills/genre-tagger/)** — look up missing genres on
+  Discogs and MusicBrainz, review the proposals by confidence, and write the ones
+  you accept to rekordbox.
+- **[metadata-fixer](.agents/skills/metadata-fixer/)** — find tracks with no artist,
+  look up the correct metadata, and write the fixes you accept.
+- **[genre-sorter](.agents/skills/genre-sorter/)** — sort your collection into your
+  genre playlists from an editable rules file, with a plan to review first.
+- **[path-relocate](.agents/skills/path-relocate/)** — repoint tracks in bulk after
+  a drive rename, for when rekordbox's own Relocate doesn't save.
 - **[audio-converter](.agents/skills/audio-converter/)** — convert audio files
   between WAV, AIFF, and AAC using macOS's built-in `afconvert` (nothing to
   install). Standalone and non-destructive; it won't do lossy→lossless or

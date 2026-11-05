@@ -1,0 +1,337 @@
+<title>Drive Diff</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@400;600&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: a ledger of folder comparisons, read like a diff. Left and right keep one colour each all the way down. */
+:root {
+  --bg: #eceff1; --panel: #f7f9fa; --line: #cfd6db; --fg: #18222a; --muted: #5a6872;
+  --left: #0b6f7c; --left-soft: #d3ecee; --right: #a2460f; --right-soft: #f6e0d2;
+  --shared: #9aa8b1; --accent: #24408e; --accent-fg: #ffffff; --rb: #5b2a86; --rb-soft: #e8dcf3;
+  --warn: #8a5a00;
+  --ui: "Figtree", -apple-system, "Segoe UI", sans-serif;
+  --mono: "Martian Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12171b; --panel: #1a2126; --line: #2e3840; --fg: #e4eaee; --muted: #94a3ad;
+  --left: #5ccbd8; --left-soft: #123a40; --right: #f0a273; --right-soft: #472713;
+  --shared: #5c6b75; --accent: #9db4f5; --accent-fg: #101a33; --rb: #cfa8f0; --rb-soft: #36234a;
+  --warn: #e6b95c; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12171b; --panel: #1a2126; --line: #2e3840; --fg: #e4eaee; --muted: #94a3ad;
+  --left: #5ccbd8; --left-soft: #123a40; --right: #f0a273; --right-soft: #472713;
+  --shared: #5c6b75; --accent: #9db4f5; --accent-fg: #101a33; --rb: #cfa8f0; --rb-soft: #36234a;
+  --warn: #e6b95c; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font: 15px/1.45 var(--ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px 64px }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg) }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 16px }
+h1 { font: 600 26px/1.1 var(--mono); letter-spacing: -.03em; margin: 0 }
+.intro { color: var(--muted); max-width: 68ch; margin: 6px 0 0 }
+.tally { display: flex; flex-wrap: wrap; gap: 8px 32px; font-variant-numeric: tabular-nums }
+.tally div { min-width: 0 }
+.tally b { display: block; font: 600 20px/1.2 var(--mono) }
+.tally span { color: var(--muted); font-size: 13px }
+.meter { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden }
+.meter i { display: block; height: 100%; background: var(--accent); width: 0 }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 8px;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; border-bottom: 1px solid var(--line) }
+.bar input { flex: 1 1 200px; min-width: 0; font: inherit; color: var(--fg); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px }
+button { font: 500 13px/1.2 var(--ui); color: var(--fg); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 4px; padding: 6px 10px; cursor: pointer }
+button:hover { border-color: var(--muted) }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent) }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 4px }
+.status { margin-left: auto; color: var(--muted); font-size: 13px }
+.notice { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 4px; padding: 8px 12px; font-size: 14px }
+.list { display: grid; gap: 0; border-top: 1px solid var(--line) }
+.cmp { border-bottom: 1px solid var(--line); padding-block: 12px; display: grid; gap: 8px; min-width: 0 }
+.cmp[data-decided="true"] .paths { opacity: .72 }
+.head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; align-items: start }
+.paths { display: grid; gap: 2px; min-width: 0; font: 400 12px/1.5 var(--mono); overflow-wrap: anywhere }
+.paths .l { color: var(--left) } .paths .r { color: var(--right) }
+.tag { font: 600 11px var(--mono); margin-right: 6px }
+.facts { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--muted); align-items: center; font-variant-numeric: tabular-nums }
+.diffbar { display: flex; height: 8px; width: 160px; max-width: 100%; border-radius: 2px; overflow: hidden; background: var(--line) }
+.diffbar i { display: block; height: 100% }
+.verdict { color: var(--fg); font-weight: 500 }
+.warnline { color: var(--warn); font-size: 13px }
+details summary { cursor: pointer; font-size: 13px; color: var(--accent); width: fit-content }
+.scroll { overflow-x: auto; margin-top: 8px }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font: 400 12px/1.45 var(--mono) }
+th { text-align: left; font: 600 12px var(--ui); color: var(--muted); padding: 4px 8px; border-bottom: 1px solid var(--line) }
+td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere }
+td.go { text-decoration: line-through; color: var(--muted) }
+tr.onlyl td:first-child { background: var(--left-soft) } tr.onlyr td:nth-child(2) { background: var(--right-soft) }
+.rb { display: inline-block; font: 600 10px var(--ui); background: var(--rb-soft); color: var(--rb); border-radius: 3px; padding: 1px 5px; margin-left: 6px; white-space: nowrap }
+.pick { display: inline-flex; gap: 3px; flex-wrap: wrap } .pick button { padding: 3px 7px; font-size: 12px }
+@media (max-width: 720px) { .head { grid-template-columns: minmax(0, 1fr) } .status { margin-left: 0; width: 100% } }
+</style>
+<div class="wrap">
+  <header>
+    <h1>Drive Diff</h1>
+    <p class="intro">Every pair below holds byte-identical audio. Pick what stays, and open a comparison to see each file or change one. Nothing moves until you ask Claude to apply these choices, and removed files go to a quarantine folder first.</p>
+  </header>
+  <section class="tally" aria-label="Totals">
+    <div><b id="t-decided">0</b><span id="t-decided-of"></span></div>
+    <div><b id="t-files">0</b><span>files to remove</span></div>
+    <div><b id="t-gb">0</b><span>GB freed</span></div>
+    <div><b id="t-repoint">0</b><span>rekordbox entries to repoint</span></div>
+  </section>
+  <div class="meter"><i id="meter"></i></div>
+  <div class="bar">
+    <input id="search" type="search" placeholder="Search folders and files" aria-label="Search folders and files">
+    <span class="seg" id="f-kind"></span>
+    <span class="seg" id="f-state"></span>
+    <button id="bulk">Keep rekordbox's copies for undecided</button>
+    <span class="status" id="status" role="status">Loading saved choices</span>
+  </div>
+  <div class="notice" id="notice" hidden></div>
+  <div class="list" id="list"></div>
+</div>
+<script id="data" type="application/json">/*__DATA__*/</script>
+<script>
+const D = JSON.parse(document.getElementById("data").textContent);
+const sets = Object.fromEntries(D.sets.map(s => [s.h, s]));
+const dirOf = p => p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
+const baseOf = p => p.slice(p.lastIndexOf("/") + 1);
+const CHOICES = { rb: "Rekordbox's copies", left: "Keep left", right: "Keep right", tidy: "Tidiest names", both: "Keep both" };
+let decisions = {}, ref = null, saveTimer = null, saving = Promise.resolve(), lastSaved = "{}", undo = null;
+const view = { q: "", kind: "all", state: "all" };
+
+function el(tag, props = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") n.className = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else if (k === "text") n.textContent = v;
+    else n.setAttribute(k, v);
+  }
+  n.append(...kids.filter(Boolean));
+  return n;
+}
+const same = p => p.l === p.r;
+const members = (p, s) => s.p.map((_, i) => i).filter(i => [p.l, p.r].includes(dirOf(s.p[i])));
+const onSide = (s, dir) => s.p.findIndex(x => dirOf(x) === dir);
+
+function keeper(p, s) {
+  const d = decisions[p.k];
+  if (!d) return null;
+  const o = d.overrides && d.overrides[s.h];
+  if (o !== undefined) return o;
+  if (d.choice === "both") return "both";
+  if (d.choice === "left") return onSide(s, p.l);
+  if (d.choice === "right") return onSide(s, p.r);
+  if (d.choice === "tidy") return s.tidy;
+  return s.rb >= 0 ? s.rb : s.tidy;
+}
+
+function plan() {
+  const drops = new Map();
+  for (const p of D.pairs) for (const h of p.sets) {
+    const s = sets[h], k = keeper(p, s);
+    if (k === null || k === "both") continue;
+    if (!drops.has(h)) drops.set(h, new Set());
+    for (const i of members(p, s)) if (i !== k) drops.get(h).add(i);
+  }
+  let files = 0, bytes = 0, repoint = 0;
+  for (const [h, gone] of drops) {
+    const s = sets[h];
+    if (gone.size === s.p.length) gone.delete(s.rb >= 0 ? s.rb : s.tidy);
+    files += gone.size; bytes += gone.size * s.s;
+    if (gone.has(s.rb)) repoint++;
+  }
+  return { files, bytes, repoint, drops };
+}
+
+function tally() {
+  const { files, bytes, repoint } = plan();
+  const done = D.pairs.filter(p => decisions[p.k]).length;
+  document.getElementById("t-decided").textContent = done;
+  document.getElementById("t-decided-of").textContent = `of ${D.pairs.length} comparisons decided`;
+  document.getElementById("t-files").textContent = files;
+  document.getElementById("t-gb").textContent = (bytes / 1e9).toFixed(2);
+  document.getElementById("t-repoint").textContent = repoint;
+  document.getElementById("meter").style.width = `${100 * done / D.pairs.length}%`;
+}
+
+function verdict(p) {
+  if (same(p)) return `${p.sets.length} file${p.sets.length > 1 ? "s" : ""} saved under two names`;
+  if (!p.ol.length && !p.or.length) return "Identical contents";
+  if (!p.or.length) return "Everything on the right is also on the left";
+  if (!p.ol.length) return "Everything on the left is also on the right";
+  return "Each side has its own files";
+}
+
+function diffBar(p) {
+  const n = p.sets.length, a = p.ol.length, b = p.or.length, t = n + a + b;
+  return el("span", { class: "diffbar", role: "img", "aria-label": `${n} shared, ${a} only left, ${b} only right` },
+    el("i", { style: `width:${100 * a / t}%;background:var(--left)` }),
+    el("i", { style: `width:${100 * n / t}%;background:var(--shared)` }),
+    el("i", { style: `width:${100 * b / t}%;background:var(--right)` }));
+}
+
+function setChoice(p, choice) {
+  if (decisions[p.k] && decisions[p.k].choice === choice) delete decisions[p.k];
+  else decisions[p.k] = { choice, overrides: {} };
+  changed(p);
+}
+function setOverride(p, s, value) {
+  const d = decisions[p.k] || (decisions[p.k] = { choice: "both", overrides: {} });
+  d.overrides = d.overrides || {};
+  d.overrides[s.h] = value;
+  changed(p);
+}
+function changed(p) {
+  const row = document.querySelector(`[data-k="${p.k}"]`);
+  if (row) { const open = row.querySelector("details")?.open; row.replaceWith(renderRow(p, open)); }
+  tally(); queueSave();
+}
+
+function fileCell(s, i, gone) {
+  const entry = i === s.rb;
+  return el("td", { class: gone ? "go" : "" }, baseOf(s.p[i]),
+    entry ? el("span", { class: "rb", text: `rekordbox · ${s.c} cues · ${s.n} playlists` }) : null);
+}
+
+function detail(p) {
+  const left = same(p) ? "Copy A" : "Left", right = same(p) ? "Copy B" : "Right";
+  const body = el("tbody");
+  for (const h of p.sets) {
+    const s = sets[h], m = members(p, s), k = keeper(p, s);
+    const a = same(p) ? m[0] : onSide(s, p.l), b = same(p) ? m[1] : onSide(s, p.r);
+    const dropped = i => k !== null && k !== "both" && i !== k;
+    const pick = el("span", { class: "pick" });
+    for (const [label, value] of [[same(p) ? "A" : "L", a], [same(p) ? "B" : "R", b], ["Both", "both"]])
+      pick.append(el("button", { "aria-pressed": String(k === value), onclick: () => setOverride(p, s, value), text: label }));
+    body.append(el("tr", {}, fileCell(s, a, dropped(a)), fileCell(s, b, dropped(b)),
+      el("td", { text: `${(s.s / 1e6).toFixed(1)} MB${s.p.length > 2 ? ` · ${s.p.length} copies` : ""}` }), el("td", {}, pick)));
+  }
+  for (const n of p.ol) body.append(el("tr", { class: "onlyl" }, el("td", { text: n }), el("td", { text: "" }), el("td", { text: same(p) ? "no twin" : "only left" }), el("td")));
+  for (const n of p.or) body.append(el("tr", { class: "onlyr" }, el("td", { text: "" }), el("td", { text: n }), el("td", { text: "only right" }), el("td")));
+  return el("div", { class: "scroll" }, el("table", {},
+    el("thead", {}, el("tr", {}, el("th", { text: left }), el("th", { text: right }), el("th", { text: "Size" }), el("th", { text: "Keep" }))), body));
+}
+
+function renderRow(p, open) {
+  const d = decisions[p.k];
+  const rbGoes = p.sets.filter(h => { const s = sets[h], k = keeper(p, s); return k !== null && k !== "both" && s.rb >= 0 && k !== s.rb && members(p, s).includes(s.rb); }).length;
+  const mb = p.sets.reduce((t, h) => t + sets[h].s, 0) / 1e6;
+  const seg = el("span", { class: "seg" });
+  for (const c of same(p) ? ["rb", "tidy", "both"] : ["rb", "left", "right", "both"])
+    seg.append(el("button", { "aria-pressed": String(d?.choice === c), onclick: () => setChoice(p, c), text: CHOICES[c] }));
+  const inRight = p.sets.filter(h => sets[h].rb >= 0 && dirOf(sets[h].p[sets[h].rb]) === p.r).length;
+  const paths = same(p)
+    ? el("div", { class: "paths" }, el("div", {}, p.l))
+    : el("div", { class: "paths" },
+        el("div", { class: "l" }, el("span", { class: "tag", text: "L" }), p.l),
+        el("div", { class: "r" }, el("span", { class: "tag", text: "R" }), p.r));
+  const det = el("details", { ontoggle: e => {
+    const box = e.target;
+    if (box.open && !box.querySelector(".scroll")) box.append(detail(p));
+  } }, el("summary", { text: `Compare ${p.sets.length + p.ol.length + p.or.length} files` }));
+  if (open) { det.open = true; det.append(detail(p)); }
+  return el("article", { class: "cmp", "data-k": p.k, "data-decided": String(!!d) },
+    el("div", { class: "head" }, paths, seg),
+    el("div", { class: "facts" }, same(p) ? null : diffBar(p), el("span", { class: "verdict", text: verdict(p) }),
+      el("span", { text: `${p.sets.length} identical · ${mb.toFixed(0)} MB` }),
+      same(p) ? null : el("span", { text: `${p.ol.length} only left · ${p.or.length} only right` }),
+      same(p) ? null : el("span", { text: `rekordbox uses ${p.sets.length - inRight} left, ${inRight} right` }),
+      d?.overrides && Object.keys(d.overrides).length ? el("span", { text: `${Object.keys(d.overrides).length} changed by hand` }) : null),
+    rbGoes ? el("div", { class: "warnline", text: `${rbGoes} rekordbox ${rbGoes > 1 ? "entries" : "entry"} will be repointed to the copy you keep.` }) : null,
+    det);
+}
+
+function visible(p) {
+  if (view.kind === "cross" && same(p)) return false;
+  if (view.kind === "same" && !same(p)) return false;
+  if (view.state === "open" && decisions[p.k]) return false;
+  if (view.state === "done" && !decisions[p.k]) return false;
+  if (!view.q) return true;
+  const hay = [p.l, p.r, ...p.ol, ...p.or, ...p.sets.flatMap(h => sets[h].p)].join("\n").toLowerCase();
+  return hay.includes(view.q);
+}
+function renderList() {
+  const list = document.getElementById("list");
+  const rows = D.pairs.filter(visible).map(p => renderRow(p));
+  list.replaceChildren(...rows);
+  if (!rows.length) list.append(el("p", { class: "intro", text: "No comparisons match this filter." }));
+}
+function filters(id, key, options) {
+  const box = document.getElementById(id);
+  const draw = () => box.replaceChildren(...options.map(([value, label]) => el("button", {
+    "aria-pressed": String(view[key] === value), text: label,
+    onclick: () => { view[key] = value; draw(); renderList(); } })));
+  draw();
+}
+
+function setStatus(text) { document.getElementById("status").textContent = text; }
+function queueSave() {
+  clearTimeout(saveTimer);
+  if (!ref) { try { localStorage.setItem("drive-diff", JSON.stringify(decisions)); } catch (e) {} return; }
+  setStatus("Saving");
+  saveTimer = setTimeout(() => {
+    const body = JSON.stringify(decisions);
+    saving = saving.then(() => ref.set({ scan: D.scan, decisions: JSON.parse(body) }))
+      .then(() => { lastSaved = body; setStatus("Saved. Claude can read these choices."); })
+      .catch(e => setStatus(`Could not save: ${e.message || e.code}. Your choices stay on this page until you reload.`));
+  }, 600);
+}
+
+function showNotice(...kids) {
+  const n = document.getElementById("notice");
+  n.replaceChildren(...kids); n.hidden = !kids.length;
+}
+document.getElementById("bulk").addEventListener("click", () => {
+  const open = D.pairs.filter(p => !decisions[p.k]);
+  if (!open.length) return showNotice(el("span", { text: "Every comparison already has a choice." }), el("button", { text: "Close", onclick: () => showNotice() }));
+  showNotice(el("span", { text: `Keep rekordbox's copy in ${open.length} undecided comparisons?` }),
+    el("button", { text: "Apply", onclick: () => {
+      undo = JSON.stringify(decisions);
+      for (const p of open) decisions[p.k] = { choice: "rb", overrides: {} };
+      renderList(); tally(); queueSave();
+      showNotice(el("span", { text: `Set ${open.length} comparisons.` }),
+        el("button", { text: "Undo", onclick: () => { decisions = JSON.parse(undo); renderList(); tally(); queueSave(); showNotice(); } }),
+        el("button", { text: "Close", onclick: () => showNotice() }));
+    } }),
+    el("button", { text: "Cancel", onclick: () => showNotice() }));
+});
+document.getElementById("search").addEventListener("input", e => { view.q = e.target.value.trim().toLowerCase(); renderList(); });
+
+filters("f-kind", "kind", [["all", "All"], ["cross", "Two folders"], ["same", "Same folder"]]);
+filters("f-state", "state", [["all", "Any"], ["open", "Undecided"], ["done", "Decided"]]);
+renderList(); tally();
+
+function offline() {
+  try { decisions = JSON.parse(localStorage.getItem("drive-diff") || "{}"); } catch (e) {}
+  renderList(); tally();
+  setStatus("Saved in this browser only.");
+  showNotice(el("span", { text: "Claude can't read choices from this view. Copy them and paste them into the chat." }),
+    el("button", { text: "Copy choices", onclick: async e => {
+      const text = JSON.stringify({ scan: D.scan, decisions });
+      try { await navigator.clipboard.writeText(text); e.target.textContent = "Copied"; }
+      catch (err) { e.target.textContent = "Copy failed"; }
+    } }));
+}
+(async () => {
+  const db = window.claude?.use ? await claude.use("db") : null;
+  if (!db) return offline();
+  ref = db.doc("review/decisions");
+  const timer = setTimeout(() => setStatus("Saved choices can't be reached yet."), 10000);
+  ref.onSnapshot(snap => {
+    if (!snap.metadata.fromCache) clearTimeout(timer);
+    if (snap.metadata.hasPendingWrites) return;
+    const body = snap.exists ? snap.data() : {};
+    const next = JSON.stringify(body.decisions || {});
+    if (body.scan && body.scan !== D.scan) { setStatus("Saved choices are from an older scan and were left out."); return; }
+    if (next !== JSON.stringify(decisions) && next !== lastSaved) {
+      decisions = JSON.parse(next); lastSaved = next; renderList(); tally();
+    }
+    if (document.getElementById("status").textContent.startsWith("Loading")) setStatus("Choices save automatically.");
+  }, e => setStatus(`Saved choices are unavailable: ${e.message || e.code}.`));
+})();
+</script>

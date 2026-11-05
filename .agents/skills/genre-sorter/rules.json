@@ -1,0 +1,507 @@
+{
+  "folder": "Genres",
+  "weak_genres": [
+    "",
+    "Electronic",
+    "electronic",
+    "ELECTRONIC",
+    "Electronica",
+    "Electronica/Dance",
+    "Elektronica & Dance",
+    "Dance/Electronic",
+    "Dance",
+    "Alternative",
+    "Abstract",
+    "Experimental"
+  ],
+  "rules": [
+    {
+      "playlist": "GABBER",
+      "genres": [
+        "Gabber"
+      ]
+    },
+    {
+      "playlist": "GARAGE - SPEED",
+      "genres": [
+        "Speed Garage"
+      ]
+    },
+    {
+      "playlist": "GARAGE (UK)",
+      "genres": [
+        "UK Garage",
+        "2-Step"
+      ]
+    },
+    {
+      "playlist": "GRIME / DRILL",
+      "genres": [
+        "Grime",
+        "Drill"
+      ]
+    },
+    {
+      "playlist": "JUNGLE / BREAKS - ASIAN",
+      "genres": [
+        "Asian Underground",
+        "Bhangra",
+        "Dance, India"
+      ]
+    },
+    {
+      "playlist": "JUNGLE - RAGGA",
+      "genres": [
+        "Ragga",
+        "Ragga Jungle",
+        "Ragga HipHop"
+      ]
+    },
+    {
+      "playlist": "JUNGLE",
+      "genres": [
+        "Jungle"
+      ]
+    },
+    {
+      "playlist": "DNB",
+      "genres": [
+        "Drum n Bass"
+      ]
+    },
+    {
+      "playlist": "HARDCORE / RAVE",
+      "genres": [
+        "Hardcore",
+        "Rave",
+        "Breakbeat Hardcore",
+        "Happy Hardcore",
+        "Oldschool"
+      ]
+    },
+    {
+      "playlist": "BREAKBEAT - HARDCORE",
+      "genres": [
+        "Breakbeat",
+        "Breaks"
+      ],
+      "years": [
+        1,
+        1999
+      ]
+    },
+    {
+      "playlist": "BREAKBEAT (Contemporary)",
+      "genres": [
+        "Breakbeat",
+        "Breaks",
+        "Broken Beat"
+      ]
+    },
+    {
+      "playlist": "DUBSTEP (UK)",
+      "genres": [
+        "Dubstep"
+      ]
+    },
+    {
+      "playlist": "UK BASS",
+      "genres": [
+        "Bass Music",
+        "UK Funky",
+        "Bassline",
+        "Juke",
+        "Footwork"
+      ]
+    },
+    {
+      "playlist": "ACID - HOUSE",
+      "genres": [
+        "Acid House"
+      ]
+    },
+    {
+      "playlist": "HOUSE - 90s DIVA/POP",
+      "genres": [
+        "Garage House",
+        "Euro House",
+        "Hip-House",
+        "Eurodance"
+      ]
+    },
+    {
+      "playlist": "HOUSE - FRENCH / CHICAGO",
+      "genres": [
+        "French House"
+      ]
+    },
+    {
+      "playlist": "HOUSE - 90s",
+      "genres": [
+        "House",
+        "Deep House"
+      ],
+      "years": [
+        1990,
+        1999
+      ]
+    },
+    {
+      "playlist": "TECH HOUSE",
+      "genres": [
+        "Tech House"
+      ]
+    },
+    {
+      "playlist": "HOUSE",
+      "genres": [
+        "House",
+        "Deep House",
+        "Retro House",
+        "Old Skool House",
+        "Progressive House"
+      ]
+    },
+    {
+      "playlist": "TECHNO - DUB",
+      "genres": [
+        "Dub Techno"
+      ]
+    },
+    {
+      "playlist": "TECHNO - MINIMAL",
+      "genres": [
+        "Minimal",
+        "Minimal Techno"
+      ]
+    },
+    {
+      "playlist": "ACID - TECHNO",
+      "genres": [
+        "Acid",
+        "Acid Techno"
+      ]
+    },
+    {
+      "playlist": "TECHNO - HARD / HARDSTYLE / SCHRANZ",
+      "genres": [
+        "Hard Techno",
+        "Schranz",
+        "Hardstyle",
+        "Makina"
+      ]
+    },
+    {
+      "playlist": "TECHNO - TRIBAL",
+      "genres": [
+        "Tribal"
+      ]
+    },
+    {
+      "playlist": "TECHNO - PSYCH / HYPNOTIC",
+      "genres": [
+        "Deep Techno"
+      ]
+    },
+    {
+      "playlist": "TECHNO - DARK",
+      "genres": [
+        "Industrial Techno"
+      ]
+    },
+    {
+      "playlist": "TECHNO - AMBIENT",
+      "genres": [
+        "Ambient Techno"
+      ]
+    },
+    {
+      "playlist": "TECHNO - LEFTFIELD",
+      "genres": [
+        "Leftfield"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "TECHNO - 90s",
+      "genres": [
+        "Techno"
+      ],
+      "years": [
+        1,
+        1999
+      ]
+    },
+    {
+      "playlist": "TECHNO",
+      "genres": [
+        "Techno",
+        "Deepstep Techno",
+        "Belgian Techno"
+      ]
+    },
+    {
+      "playlist": "ELECTRO",
+      "genres": [
+        "Electro"
+      ]
+    },
+    {
+      "playlist": "IDM",
+      "genres": [
+        "IDM",
+        "Glitch"
+      ]
+    },
+    {
+      "playlist": "EBM",
+      "genres": [
+        "EBM",
+        "Futurepop",
+        "New Beat"
+      ]
+    },
+    {
+      "playlist": "INDUSTRIAL",
+      "genres": [
+        "Industrial"
+      ]
+    },
+    {
+      "playlist": "TRANCE - PSYCH",
+      "genres": [
+        "Goa Trance",
+        "Psy-Trance"
+      ]
+    },
+    {
+      "playlist": "TRANCE - MELODIC",
+      "genres": [
+        "Trance",
+        "Progressive Trance",
+        "Hard Trance"
+      ]
+    },
+    {
+      "playlist": "TRIPHOP",
+      "genres": [
+        "Trip Hop"
+      ]
+    },
+    {
+      "playlist": "DOWNTEMPO",
+      "genres": [
+        "Downtempo"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "LOUNGE / CHILLOUT",
+      "genres": [
+        "Chillout",
+        "Lounge",
+        "Easy Listening"
+      ]
+    },
+    {
+      "playlist": "AMBIENT",
+      "genres": [
+        "Ambient",
+        "Dark Ambient",
+        "Drone",
+        "New Age"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "JAZZ",
+      "genres": [
+        "Jazz",
+        "Contemporary Jazz",
+        "Avant-garde Jazz",
+        "Jazz-Funk"
+      ]
+    },
+    {
+      "playlist": "HIPHOP - 90s",
+      "genres": [
+        "Hip Hop",
+        "Boom Bap"
+      ],
+      "years": [
+        1990,
+        1999
+      ]
+    },
+    {
+      "playlist": "POST-PUNK",
+      "genres": [
+        "Post-Punk",
+        "New Wave"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "DARKWAVE",
+      "genres": [
+        "Darkwave"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "SYNTH-POP",
+      "genres": [
+        "Synth-pop",
+        "Synthwave",
+        "Europop"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "NOISE",
+      "genres": [
+        "Noise"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "DUB",
+      "genres": [
+        "Dub"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "REGGAE",
+      "genres": [
+        "Reggae",
+        "Dancehall",
+        "Lovers Rock"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "INDIE",
+      "genres": [
+        "Indie Pop",
+        "Indie Rock",
+        "Indie"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "ROCK",
+      "genres": [
+        "Rock",
+        "Alternative Rock",
+        "Soft Rock",
+        "Krautrock",
+        "Post Rock"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "METAL",
+      "genres": [
+        "Metal",
+        "Doom Metal",
+        "Death Metal",
+        "Rap Metal"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "HIPHOP",
+      "genres": [
+        "Hip Hop",
+        "Boom Bap",
+        "'80s Hip-Hop",
+        "Foreign Rap"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "SOUL / R&B",
+      "genres": [
+        "Soul",
+        "Neo Soul",
+        "Rhythm & Blues"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "BLUES",
+      "genres": [
+        "Blues"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "POP",
+      "genres": [
+        "Pop",
+        "Contemporary Christian"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "WORLD / FOLK",
+      "genres": [
+        "Gamelan",
+        "African",
+        "Folk",
+        "Avant-Folk"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "AVANT-GARDE",
+      "genres": [
+        "Electroacoustic",
+        "Musique Concrète",
+        "Free Improvisation",
+        "Field Recording",
+        "Illbient"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "SOUNDTRACK",
+      "genres": [
+        "Soundtrack"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "VAPORWAVE",
+      "genres": [
+        "Vaporwave"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "BIG BEAT",
+      "genres": [
+        "Big Beat"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "DISCO / FUNK",
+      "genres": [
+        "Disco",
+        "Italo-Disco",
+        "Funk",
+        "General Funk & Fusion"
+      ],
+      "genre_only": true
+    },
+    {
+      "playlist": "BALTIMORE CLUB",
+      "genres": [
+        "Baltimore Club"
+      ],
+      "genre_only": true
+    }
+  ]
+}

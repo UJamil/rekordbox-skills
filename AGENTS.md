@@ -18,8 +18,13 @@ user's request matches:
 | Skill | What it does | Route here when… |
 | --- | --- | --- |
 | **[playlist-dedupe](.agents/skills/playlist-dedupe/)** | Finds and prunes duplicate tracks in a playlist or the whole library, keeping the best-quality copy; version-aware and reviews every group with the user before writing. | The user wants to clean up, dedupe, find duplicates in, or remove repeated / lower-quality tracks from a rekordbox playlist or library — e.g. *"this playlist has a bunch of dupes"* or *"I have the same song twice in different quality."* |
-| **[upgrade-finder](.agents/skills/upgrade-finder/)** | Scans a playlist's low-bitrate (≤320k) tracks and searches the whole library for a higher-quality file of the same recording (lossless beats lossy, then higher bitrate). Read-only report; takes no action. | The user wants to find higher-quality versions they already own — e.g. *"are there better copies of these tracks?"*, *"which of these MP3s do I have a FLAC/WAV of?"*, *"find upgrades for my Disco playlist."* |
+| **[upgrade-finder](.agents/skills/upgrade-finder/)** | Scans a playlist's low-bitrate (≤320k) tracks and searches the whole library for a higher-quality file of the same recording (lossless beats lossy, then higher bitrate). Read-only report; takes no action. `scan_low_bitrate.py` flags low-bitrate tracks across the whole collection. | The user wants to find higher-quality versions they already own — e.g. *"are there better copies of these tracks?"*, *"which of these MP3s do I have a FLAC/WAV of?"*, *"find upgrades for my Disco playlist"*, *"flag everything at 192 kbps or below."* |
 | **[version-finder](.agents/skills/version-finder/)** | Takes an `"Artist - Song Title"` query and scans the whole library for every version/edit/remix the user owns, printing a read-only table (Version, Format, Bitrate, BPM, Key, Playlists), one row per file. Version-aware grouping; reads an optional user-authored Comments token to catch renamed edits/sample flips. Read-only, no writes. | The user wants to know what versions of a track they have — e.g. *"what versions of <artist - title> do I have?"*, *"what remixes of X are in my library?"*, *"show me every version of this song"*, *"do I have the extended mix of …, and which playlists is it in?"* |
+| **[genre-tagger](.agents/skills/genre-tagger/)** | Looks up genres on Discogs and MusicBrainz, rates each proposal by confidence, and writes accepted genres to rekordbox after review. Blank-genre tracks only by default. | The user wants to find, fill in, or scrape genres or metadata for their library — e.g. *"tag my tracks with genres"*, *"half my library has no genre"*, *"get genre info from Discogs."* |
+| **[metadata-fixer](.agents/skills/metadata-fixer/)** | Finds tracks with no artist, parses their filenames, optionally looks up metadata on Discogs and MusicBrainz, and writes accepted fixes. Database only. | The user wants to find or fix untagged tracks — e.g. *"find tracks with no artist"*, *"fix my untagged mp3s."* |
+| **[genre-sorter](.agents/skills/genre-sorter/)** | Sorts tracks into genre playlists from an editable rules file, using genre, Discogs styles and year. Shows a plan first and only adds to playlists. | The user wants to sort or file their collection into genre playlists — e.g. *"sort my library into my genre playlists"*, *"fill my Genres folder."* |
+| **[path-relocate](.agents/skills/path-relocate/)** | Repoints tracks after a drive or folder rename by swapping a path prefix in the database, for tracks whose file exists at the new location. Also merges entries that point at byte-identical files. Database only. | The user has missing tracks after renaming or moving a drive, or rekordbox's Relocate didn't work — e.g. *"rekordbox still points at my old drive"*, *"relocate didn't stick."* |
+| **[file-dedupe](.agents/skills/file-dedupe/)** | Finds byte-identical audio files on a drive, compares the folders that hold them, and records which copies to keep on an interactive review page. Read-only so far. | The user wants to find or compare duplicate files on disk — e.g. *"what duplicate files are on my drive?"*, *"compare these folders"*, *"which copies can I delete?"* |
 | **[audio-converter](.agents/skills/audio-converter/)** | Converts audio files between WAV, AIFF, and AAC using macOS's built-in `afconvert` (no installs). Standalone — touches files only, not the rekordbox DB. Refuses lossy→lossless and same-format conversions. | The user wants to convert, transcode, or change the format of audio files — e.g. *"convert these AIFFs to WAV"*, *"turn my WAVs into AIFF"*, *"compress this folder to AAC for the CDJs"*, *"shrink these files."* (MP3 not supported yet.) |
 
 When a skill matches, load its `SKILL.md` and follow it — the skill's own docs are
@@ -94,14 +99,28 @@ When the user says **"Create a project [name]"** (or "start a project for X", "n
 ## Working in this repo
 
 - **Launch**: start the agent in this repo so the `.claude/skills/` symlinks load
-  the skills, and give it access to the library for reading `master.db` / backups:
+  the skills, and give it access to the library and music files:
 
   ```sh
-  claude --add-dir ~/Library/Pioneer/rekordbox
+  claude --add-dir /Volumes/<YourDrive>/PIONEER \
+         --add-dir /Volumes/<YourDrive>/Music
   ```
 
   (Skill scripts find the DB on their own via `pyrekordbox`, so `--add-dir` is only
   for the agent's own file access.)
+
+  **Library paths (replace `<YourDrive>` with your own):**
+  - Rekordbox DB: `/Volumes/<YourDrive>/PIONEER/Master/master.db` (rekordbox's `db-path`
+    setting points here, and pyrekordbox follows it)
+  - DB backups: `rekordbox-db-backups/` beside `master.db`
+  - Music files: `/Volumes/<YourDrive>/Music/`
+
+  > **Note on file paths**: if a drive was renamed, the rekordbox DB may still record
+  > audio file paths as `/Volumes/<OldDrive>/Music/…`. This doesn't affect
+  > the DB-based skills (they read metadata from the DB, not the audio files), but
+  > rekordbox itself will show "file not found" until the files are relocated inside
+  > the app via **File > Manage Library > Relocate**.
+
 - **Running a skill's scripts**: each script puts `.agents/shared/` on `sys.path`
   via a `__file__`-relative stanza, so it imports the shared `rb_common.py` (and
   friends) no matter the working directory — you can run it from the `scripts/` dir
@@ -113,6 +132,6 @@ When the user says **"Create a project [name]"** (or "start a project for X", "n
   # or, from the repo root:
   python3 .agents/skills/playlist-dedupe/scripts/test_matcher.py
   ```
-- **Dependency** (for skills that touch the DB): `pip3 install pyrekordbox --break-system-packages`.
+- **Dependency** (for skills that touch the DB): `pip3 install pyrekordbox`.
   `master.db` is an encrypted SQLCipher database — always open it through
   `pyrekordbox`, never plain `sqlite3`.

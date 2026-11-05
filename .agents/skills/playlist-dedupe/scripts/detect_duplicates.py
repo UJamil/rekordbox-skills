@@ -266,7 +266,12 @@ def memberships_for(db, tables, index, content_id, exclude_terms):
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Detect duplicates in a playlist.")
-    ap.add_argument("playlist_id", help="The confirmed playlist ID from resolve_playlist.")
+    ap.add_argument("playlist_id", nargs="?",
+                    help="The confirmed playlist ID from resolve_playlist. "
+                         "Omit when using --all-tracks.")
+    ap.add_argument("--all-tracks", action="store_true",
+                    help="Scan ALL tracks in the library (entire collection), "
+                         "not just a single playlist.")
     ap.add_argument("--out", default="manifest.json", help="Where to write the manifest.")
     ap.add_argument("--title-threshold", type=float, default=DEFAULT_TITLE_THRESHOLD)
     ap.add_argument("--artist-threshold", type=float, default=DEFAULT_ARTIST_THRESHOLD)
@@ -276,33 +281,47 @@ def main() -> int:
                          "Pass '' to disable.")
     args = ap.parse_args()
 
+    if not args.all_tracks and not args.playlist_id:
+        ap.error("playlist_id is required unless --all-tracks is passed.")
+
     exclude_terms = [t.strip() for t in args.exclude_path.split(",") if t.strip()]
 
     from pyrekordbox.db6 import tables  # local import; needs the db package
 
     db = get_db()
     index = build_playlist_index(db)
-    pid = str(args.playlist_id)
-    if pid not in index:
-        raise SystemExit(f"No playlist with id {pid}. Run resolve_playlist.py first.")
 
-    target = index[pid]
-    target_path = playlist_path(index, pid)
-    if is_excluded(target_path, exclude_terms):
-        raise SystemExit(
-            f"Target playlist '{target_path}' matches an exclude term "
-            f"({exclude_terms}) and is protected. Nothing to do. "
-            f"Use --exclude-path '' to override."
-        )
-    # get_playlist_contents does not exclude tombstoned (rb_local_deleted=1)
-    # memberships -- removals pending cloud-sync upload -- so intersect with the
-    # playlist's live song rows; otherwise an already-removed track would be
-    # re-detected as a duplicate.
-    live_ids = {str(r.ContentID) for r in db.get_playlist_songs()
-                .filter(tables.DjmdSongPlaylist.PlaylistID == pid,
-                        tables.DjmdSongPlaylist.rb_local_deleted == 0).all()}
-    contents = [c for c in db.get_playlist_contents(target) if str(c.ID) in live_ids]
-    tracks = [track_facts(c) for c in contents]
+    if args.all_tracks:
+        # Scan every track in the library. For entire-collection mode the
+        # "target playlist" is a sentinel; scope="target_only" produces no
+        # playlist removals (there is no single target), so the only meaningful
+        # scope for decided groups is "everywhere". The reviewer is told this.
+        pid = "all"
+        playlist_info = {"id": "all", "name": "All Tracks (entire library)", "path": ""}
+        tracks = [track_facts(c) for c in db.get_content()]
+    else:
+        pid = str(args.playlist_id)
+        if pid not in index:
+            raise SystemExit(f"No playlist with id {pid}. Run resolve_playlist.py first.")
+
+        target = index[pid]
+        target_path = playlist_path(index, pid)
+        if is_excluded(target_path, exclude_terms):
+            raise SystemExit(
+                f"Target playlist '{target_path}' matches an exclude term "
+                f"({exclude_terms}) and is protected. Nothing to do. "
+                f"Use --exclude-path '' to override."
+            )
+        playlist_info = {"id": pid, "name": target.Name, "path": target_path}
+        # get_playlist_contents does not exclude tombstoned (rb_local_deleted=1)
+        # memberships -- removals pending cloud-sync upload -- so intersect with the
+        # playlist's live song rows; otherwise an already-removed track would be
+        # re-detected as a duplicate.
+        live_ids = {str(r.ContentID) for r in db.get_playlist_songs()
+                    .filter(tables.DjmdSongPlaylist.PlaylistID == pid,
+                            tables.DjmdSongPlaylist.rb_local_deleted == 0).all()}
+        contents = [c for c in db.get_playlist_contents(target) if str(c.ID) in live_ids]
+        tracks = [track_facts(c) for c in contents]
 
     groups = cluster_duplicates(tracks, args.title_threshold, args.artist_threshold)
 
@@ -367,7 +386,7 @@ def main() -> int:
 
     manifest = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "playlist": {"id": pid, "name": target.Name, "path": playlist_path(index, pid)},
+        "playlist": playlist_info,
         "thresholds": {"title": args.title_threshold, "artist": args.artist_threshold},
         "exclude_path_terms": exclude_terms,
         "protected_playlists_skipped": protected,
@@ -391,8 +410,10 @@ def main() -> int:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
 
     s = manifest["summary"]
+    pl = manifest["playlist"]
+    pl_label = pl["path"] or pl["name"]
     print(f"Wrote {args.out}")
-    print(f"  Playlist: {manifest['playlist']['path']} ({s['playlist_track_count']} tracks)")
+    print(f"  Playlist: {pl_label} ({s['playlist_track_count']} tracks)")
     print(f"  Duplicate groups: {s['duplicate_groups']} "
           f"({s['exact_groups']} exact, {s['looks_same_groups']} look the same, "
           f"{s['different_version_groups']} different versions)")
@@ -404,6 +425,11 @@ def main() -> int:
     print(f"  explicitly decide. Table 1 (exact) can be replaced in bulk")
     print(f"  (decide.py --all-exact --scope ...); tables 2 & 3 are reviewed one")
     print(f"  at a time (keeper + scope). Apply refuses until all are set.")
+    if args.all_tracks:
+        print(f"\n  ENTIRE COLLECTION mode: 'target_only' scope removes the loser from")
+        print(f"  no playlists (there is no single target). Use 'everywhere' to remove")
+        print(f"  losers from all playlists they appear in. Tracks not in any playlist")
+        print(f"  are identified but not actionable via this skill (delete manually).")
     return 0
 
 

@@ -13,6 +13,7 @@ need; unused helpers are harmless.
 """
 from __future__ import annotations
 
+import os
 import re
 from difflib import SequenceMatcher
 from functools import lru_cache
@@ -472,8 +473,10 @@ def rank_key(track: dict) -> tuple:
     better. The trailing content_id makes the order *total* -- if two files tie
     on quality, the winner is still decided the same way on every run, so the
     manifest is reproducible. We negate content_id so 'higher tuple = winner'
-    consistently prefers the lower id as the final, arbitrary tiebreak."""
+    consistently prefers the lower id as the final, arbitrary tiebreak. A copy whose
+    file exists always beats one that's missing, whatever its quality."""
     return (
+        1 if os.path.exists(track.get("path") or "") else 0,
         1 if track["lossless"] else 0,
         track["bitrate"],
         track["file_size"],
