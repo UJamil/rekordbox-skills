@@ -69,3 +69,14 @@ python3 scripts/find_artist_titles.py --labels labels.txt --out titles.json --cs
 python3 scripts/apply_metadata.py titles.json            # dry run
 python3 scripts/apply_metadata.py titles.json --apply
 ```
+
+## Duplicates and spelling
+
+`find_name_issues.py` is read-only. It lists tracks that look like the same recording,
+artist, album and genre names spelled more than one way, and titles with junk in them.
+Tracks with no artist can't be compared, so fix those first.
+
+```
+python3 scripts/find_name_issues.py --out issues.json --csv issues.csv
+```
+

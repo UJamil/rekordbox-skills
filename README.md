@@ -33,7 +33,10 @@ it, and ask in plain language.
   you accept to rekordbox. Can also rename genre labels across the library.
 - **[metadata-fixer](.agents/skills/metadata-fixer/)** — find tracks with no artist,
   or with the artist in the title, look up the correct metadata, and write the fixes
-  you accept.
+  you accept. Also lists duplicates and spelling problems for review.
+- **[artwork-finder](.agents/skills/artwork-finder/)** — find tracks with no album
+  artwork and fill it in from the same album, the audio files, cover images left in
+  folders, Discogs and the Cover Art Archive, after you review a contact sheet.
 - **[genre-sorter](.agents/skills/genre-sorter/)** — sort your collection into your
   genre playlists from an editable rules file, with a plan to review first.
 - **[path-relocate](.agents/skills/path-relocate/)** — repoint tracks in bulk after
@@ -86,7 +89,7 @@ Sean Wilson aka Moon Trip | Disco House Producer & DJ |
 [@moontripdisco](https://www.instagram.com/moontripdisco) | [Spotify](https://open.spotify.com/artist/2LXK0OCfgTMrAcKaauWxag?si=stIynY2uTKanfDoK2BY7Jw) | [SoundCloud](https://soundcloud.com/moontripdisco)
 Created this collection and wrote playlist-dedupe, upgrade-finder, version-finder and audio-converter.
 
-[UJamil](https://github.com/UJamil) | Wrote file-dedupe, genre-tagger, genre-sorter, metadata-fixer and path-relocate.
+[UJamil](https://github.com/UJamil) | Wrote file-dedupe, genre-tagger, genre-sorter, metadata-fixer, path-relocate and artwork-finder.
 
 ## Help Using
 If you are new to anything related to code, Claude Code / AI, GitHub or tech like this, please send me a dm on instagram (@moontripdisco) or an email: (moontripdisco@gmail.com). I would love to help you!
